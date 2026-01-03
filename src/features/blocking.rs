@@ -1,0 +1,96 @@
+use crate::client::Client;
+use crate::jid_utils::server_jid;
+use crate::request::{InfoQuery, IqError};
+use anyhow::Result;
+use log::debug;
+use wacore_binary::builder::NodeBuilder;
+use wacore_binary::jid::Jid;
+use wacore_binary::node::NodeContent;
+
+#[derive(Debug, Clone)]
+pub struct BlocklistEntry {
+    pub jid: Jid,
+    pub timestamp: Option<u64>,
+}
+
+pub struct Blocking<'a> {
+    client: &'a Client,
+}
+
+impl<'a> Blocking<'a> {
+    pub(crate) fn new(client: &'a Client) -> Self {
+        Self { client }
+    }
+
+    pub async fn block(&self, jid: &Jid) -> Result<(), IqError> {
+        debug!(target: "Blocking", "Blocking contact: {}", jid);
+        self.update_blocklist(jid, "block").await
+    }
+
+    pub async fn unblock(&self, jid: &Jid) -> Result<(), IqError> {
+        debug!(target: "Blocking", "Unblocking contact: {}", jid);
+        self.update_blocklist(jid, "unblock").await
+    }
+
+    pub async fn get_blocklist(&self) -> Result<Vec<BlocklistEntry>> {
+        debug!(target: "Blocking", "Fetching blocklist...");
+
+        let iq = InfoQuery::get("blocklist", server_jid(), None);
+
+        let response = self.client.send_iq(iq).await?;
+        self.parse_blocklist_response(&response)
+    }
+
+    async fn update_blocklist(&self, jid: &Jid, action: &str) -> Result<(), IqError> {
+        let item_node = NodeBuilder::new("item")
+            .attr("action", action)
+            .attr("jid", jid.to_string())
+            .build();
+
+        let iq = InfoQuery::set(
+            "blocklist",
+            server_jid(),
+            Some(NodeContent::Nodes(vec![item_node])),
+        );
+
+        self.client.send_iq(iq).await?;
+        debug!(target: "Blocking", "Successfully {}ed contact: {}", action, jid);
+        Ok(())
+    }
+
+    fn parse_blocklist_response(
+        &self,
+        node: &wacore_binary::node::Node,
+    ) -> Result<Vec<BlocklistEntry>> {
+        let mut entries = Vec::new();
+
+        let items = if let Some(list) = node.get_optional_child("list") {
+            list.get_children_by_tag("item")
+        } else {
+            node.get_children_by_tag("item")
+        };
+
+        for item in items {
+            if let Some(jid_str) = item.attrs().optional_string("jid")
+                && let Ok(jid) = jid_str.parse::<Jid>()
+            {
+                let timestamp = item.attrs().optional_u64("t");
+                entries.push(BlocklistEntry { jid, timestamp });
+            }
+        }
+
+        debug!(target: "Blocking", "Parsed {} blocked contacts", entries.len());
+        Ok(entries)
+    }
+
+    pub async fn is_blocked(&self, jid: &Jid) -> Result<bool> {
+        let blocklist = self.get_blocklist().await?;
+        Ok(blocklist.iter().any(|e| e.jid.user == jid.user))
+    }
+}
+
+impl Client {
+    pub fn blocking(&self) -> Blocking<'_> {
+        Blocking::new(self)
+    }
+}

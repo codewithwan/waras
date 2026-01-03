@@ -1,0 +1,21 @@
+services:
+  whatsapp-bot:
+    build: .
+    image: whatsapp-rust:latest
+    container_name: whatsapp-rust
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    volumes:
+      - ./data:/app/data
+    environment:
+      - RUST_LOG=info
+    # command: ["--phone", "1234567890"] # Uncomment to use pair code
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
