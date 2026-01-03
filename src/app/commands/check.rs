@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 use log::error;
 use sysinfo::System;
 use waproto::whatsapp as wa;
@@ -138,7 +139,7 @@ fn get_cgroup_memory_usage() -> Option<u64> {
 fn get_cgroup_cpu_limit() -> Option<f64> {
     // Check v2 (cpu.max)
     if let Ok(contents) = std::fs::read_to_string("/sys/fs/cgroup/cpu.max") {
-        let parts: Vec<&str> = contents.trim().split_whitespace().collect();
+        let parts: Vec<&str> = contents.split_whitespace().collect();
         if parts.len() == 2 {
             if let (Ok(quota), Ok(period)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
                 if quota > 0.0 && period > 0.0 {

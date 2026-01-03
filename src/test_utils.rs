@@ -216,11 +216,7 @@ impl AppSyncStore for MockBackend {
         }
         Ok(())
     }
-    async fn get_mutation_mac(
-        &self,
-        name: &str,
-        index_mac: &[u8],
-    ) -> StoreResult<Option<Vec<u8>>> {
+    async fn get_mutation_mac(&self, name: &str, index_mac: &[u8]) -> StoreResult<Option<Vec<u8>>> {
         Ok(self
             .macs
             .lock()
